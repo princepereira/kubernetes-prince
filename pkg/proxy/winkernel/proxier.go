@@ -651,6 +651,7 @@ type Proxier struct {
 	mu                sync.Mutex // protects the following fields
 	svcPortMap        proxy.ServicePortMap
 	endpointsMap      proxy.EndpointsMap
+	topologyLabels    map[string]string
 	// endpointSlicesSynced and servicesSynced are set to true when corresponding
 	// objects are synced after startup. This is used to avoid updating hns policies
 	// with some partial data after kube-proxy restart.
@@ -1095,12 +1096,16 @@ func (proxier *Proxier) OnEndpointSlicesSynced() {
 // in any of the ServiceCIDRs, and provides complete list of service cidrs.
 func (proxier *Proxier) OnServiceCIDRsChanged(_ []string) {}
 
-// TODO(imroc): implement OnTopologyChanged for winkernel proxier.
 // OnTopologyChange is called whenever node topology labels are changed.
 // The informer is tweaked to listen for updates of the node where this
 // instance of kube-proxy is running, this guarantees the changed labels
 // are for this node.
-func (proxier *Proxier) OnTopologyChange(topologyLabels map[string]string) {}
+func (proxier *Proxier) OnTopologyChange(topologyLabels map[string]string) {
+	proxier.mu.Lock()
+	proxier.topologyLabels = topologyLabels
+	proxier.mu.Unlock()
+	klog.V(4).InfoS("Updated proxier node topology labels", "labels", topologyLabels)
+}
 
 func (proxier *Proxier) cleanupAllPolicies() {
 	for svcName, svc := range proxier.svcPortMap {
@@ -1327,7 +1332,31 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 			klog.V(4).InfoS("Skipped terminating status check for all endpoints", "svcClusterIP", svcInfo.ClusterIP(), "ingressLBCount", len(svcInfo.loadBalancerIngressIPs))
 		}
 
-		for _, epInfo := range proxier.endpointsMap[svcName] {
+		// Categorize endpoints using topology-aware logic
+		allEndpoints := proxier.endpointsMap[svcName]
+		clusterEndpoints, localEndpoints, allLocallyReachableEndpoints, hasEndpoints := proxy.CategorizeEndpoints(allEndpoints, svcInfo, proxier.nodeName, proxier.topologyLabels)
+
+		// Log endpoint categorization for debugging
+		klog.V(4).InfoS("Categorized endpoints for service", "serviceName", svcName,
+			"totalEndpoints", len(allEndpoints),
+			"clusterEndpoints", len(clusterEndpoints),
+			"localEndpoints", len(localEndpoints),
+			"allLocallyReachableEndpoints", len(allLocallyReachableEndpoints),
+			"hasEndpoints", hasEndpoints)
+
+		// Use the appropriate endpoint set based on the service configuration
+		// For now, we use allLocallyReachableEndpoints which includes both cluster and local endpoints
+		// that are reachable from this node, taking topology hints into account
+		endpointsToProcess := allLocallyReachableEndpoints
+		if !hasEndpoints {
+			endpointsToProcess = []proxy.Endpoint{}
+		}
+
+		// Avoid unused variable warnings by referencing them
+		_ = clusterEndpoints
+		_ = localEndpoints
+
+		for _, epInfo := range endpointsToProcess {
 			ep, ok := epInfo.(*endpointInfo)
 			if !ok {
 				klog.ErrorS(nil, "Failed to cast endpointInfo", "serviceName", svcName)
