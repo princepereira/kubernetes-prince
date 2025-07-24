@@ -1537,7 +1537,7 @@ func TestOnTopologyChange(t *testing.T) {
 
 	// Test setting topology labels
 	testLabels := map[string]string{
-		"topology.kubernetes.io/zone": "us-west-2a",
+		"topology.kubernetes.io/zone":   "us-west-2a",
 		"topology.kubernetes.io/region": "us-west-2",
 	}
 

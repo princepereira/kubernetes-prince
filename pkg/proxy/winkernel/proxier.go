@@ -1337,10 +1337,10 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		clusterEndpoints, localEndpoints, allLocallyReachableEndpoints, hasEndpoints := proxy.CategorizeEndpoints(allEndpoints, svcInfo, proxier.nodeName, proxier.topologyLabels)
 
 		// Log endpoint categorization for debugging
-		klog.V(4).InfoS("Categorized endpoints for service", "serviceName", svcName, 
-			"totalEndpoints", len(allEndpoints), 
-			"clusterEndpoints", len(clusterEndpoints), 
-			"localEndpoints", len(localEndpoints), 
+		klog.V(4).InfoS("Categorized endpoints for service", "serviceName", svcName,
+			"totalEndpoints", len(allEndpoints),
+			"clusterEndpoints", len(clusterEndpoints),
+			"localEndpoints", len(localEndpoints),
 			"allLocallyReachableEndpoints", len(allLocallyReachableEndpoints),
 			"hasEndpoints", hasEndpoints)
 
