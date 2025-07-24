@@ -1524,6 +1524,67 @@ func TestWinDSRWithOverlayEnabled(t *testing.T) {
 	}
 }
 
+func TestOnTopologyChange(t *testing.T) {
+	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, false)
+	if proxier == nil {
+		t.Error("Failed to create proxier")
+	}
+
+	// Test that topology labels are initially empty
+	if proxier.topologyLabels != nil {
+		t.Errorf("Expected topologyLabels to be nil initially, got %v", proxier.topologyLabels)
+	}
+
+	// Test setting topology labels
+	testLabels := map[string]string{
+		"topology.kubernetes.io/zone": "us-west-2a",
+		"topology.kubernetes.io/region": "us-west-2",
+	}
+
+	proxier.OnTopologyChange(testLabels)
+
+	// Verify labels were set correctly
+	proxier.mu.Lock()
+	actualLabels := proxier.topologyLabels
+	proxier.mu.Unlock()
+
+	if len(actualLabels) != len(testLabels) {
+		t.Errorf("Expected %d topology labels, got %d", len(testLabels), len(actualLabels))
+	}
+
+	for key, expectedValue := range testLabels {
+		if actualValue, ok := actualLabels[key]; !ok {
+			t.Errorf("Expected topology label %s to be present", key)
+		} else if actualValue != expectedValue {
+			t.Errorf("Expected topology label %s=%s, got %s", key, expectedValue, actualValue)
+		}
+	}
+
+	// Test updating topology labels
+	updatedLabels := map[string]string{
+		"topology.kubernetes.io/zone": "us-west-2b",
+	}
+
+	proxier.OnTopologyChange(updatedLabels)
+
+	// Verify labels were updated correctly
+	proxier.mu.Lock()
+	actualLabels = proxier.topologyLabels
+	proxier.mu.Unlock()
+
+	if len(actualLabels) != len(updatedLabels) {
+		t.Errorf("Expected %d topology labels after update, got %d", len(updatedLabels), len(actualLabels))
+	}
+
+	for key, expectedValue := range updatedLabels {
+		if actualValue, ok := actualLabels[key]; !ok {
+			t.Errorf("Expected topology label %s to be present after update", key)
+		} else if actualValue != expectedValue {
+			t.Errorf("Expected topology label %s=%s after update, got %s", key, expectedValue, actualValue)
+		}
+	}
+}
+
 func makeNSN(namespace, name string) types.NamespacedName {
 	return types.NamespacedName{Namespace: namespace, Name: name}
 }
